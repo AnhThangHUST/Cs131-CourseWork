@@ -3,7 +3,7 @@ from skimage import filters
 from skimage.util.shape import view_as_blocks
 from scipy.spatial.distance import cdist
 from scipy.ndimage.filters import convolve
-
+import random
 from utils import pad, unpad
 
 
@@ -30,13 +30,24 @@ def harris_corners(img, window_size=3, k=0.04):
 
     response = np.zeros((H, W))
 
-    dx = filters.sobel_v(img)
+    dx = filters.sobel_v(img) 
     dy = filters.sobel_h(img)
-
+    
     ### YOUR CODE HERE
     pass
+    Ix = dx # tinh dao ham theo chieu ngang de ra canh theo chieu doc
+    sqrIx = Ix ** 2
+    Iy = dy # tinh dao ham theo chieu doc de ra canh theo chieu ngang
+    sqrIy = Iy **2
+    IxIy = Ix*Iy
+    sum_sqrIx = convolve(sqrIx, window, mode = 'constant')
+    sum_sqrIy = convolve(sqrIy, window, mode = 'constant')
+    sum_IxIy = convolve(IxIy, window, mode = 'constant')
+    detM = sum_sqrIx*sum_sqrIy - sum_IxIy**2
+    traceM = sum_sqrIx+sum_sqrIy
+    response = detM - k*(traceM**2)
     ### END YOUR CODE
-
+    
     return response
 
 
@@ -61,6 +72,10 @@ def simple_descriptor(patch):
     feature = []
     ### YOUR CODE HERE
     pass
+    std = np.std(patch)
+    if std == 0:
+        std = 1
+    feature = ((patch - np.mean(patch)) / std).flatten()
     ### END YOUR CODE
     return feature
 
@@ -106,13 +121,20 @@ def match_descriptors(desc1, desc2, threshold=0.5):
     """
     matches = []
     
-    N = desc1.shape[0]
+    M = desc1.shape[0]
     dists = cdist(desc1, desc2)
-
     ### YOUR CODE HERE
     pass
+    for indice1 in range (0, M):
+        # Tim ra point nao trong desc2 match vs desc1 vi hang ngang cua x la khoang cach tu cac diem thuoc point1-> 1 diem thuoc point2
+        closest_dist, second_dist = np.sort(dists[indice1])[0:2]
+        ratio = closest_dist/second_dist
+        if  ratio < threshold:
+            # lay ra point match tu anh 1
+            indice2 = np.argsort(dists[indice1])[0]
+            matches.append([indice1,indice2])
     ### END YOUR CODE
-    
+    matches = np.array(matches)
     return matches
 
 
@@ -137,6 +159,7 @@ def fit_affine_matrix(p1, p2):
 
     ### YOUR CODE HERE
     pass
+    H = np.linalg.lstsq(p2,p1)[0]
     ### END YOUR CODE
 
     # Sometimes numerical issues cause least-squares to produce the last
@@ -171,14 +194,36 @@ def ransac(keypoints1, keypoints2, matches, n_iters=200, threshold=20):
     n_samples = int(N * 0.2)
 
     matched1 = pad(keypoints1[matches[:,0]])
-    matched2 = pad(keypoints2[matches[:,1]])
-
+    matched2 = pad(keypoints2[matches[:,1]])    
     max_inliers = np.zeros(N)
     n_inliers = 0
+    H = None
 
     # RANSAC iteration start
     ### YOUR CODE HERE
-    pass
+    pass    
+    for i in range(0, n_iters):
+        #1. Select random set of matches
+        random_indices = random.sample(list(range(N)), n_samples)
+        chosen_kp1 = matched1[random_indices]
+        chosen_kp2 = matched2[random_indices]
+        #2. Compute affine transformation matrix
+        affine_transformation_matrix = np.linalg.lstsq(chosen_kp2, chosen_kp1)[0]
+        affine_transformation_matrix[:,2] = [0,0,1]
+        #3. Compute number of inlier
+        real_matched1 = np.dot(matched2, affine_transformation_matrix)
+        diff = real_matched1 - matched1
+        dists = np.linalg.norm(diff, axis=1)
+        curr_inliers = len(np.argwhere(dists<threshold))
+        curr_max_inliers = np.where(dists<threshold)
+        #4. Keep the largest set of inliers
+        if curr_inliers > n_inliers:
+            n_inliers = curr_inliers
+            H = affine_transformation_matrix
+            max_inliers = curr_max_inliers
+    #5. Re-compute least-squares estimate on all of the inliers
+    H = np.linalg.lstsq(matched2[max_inliers], matched1[max_inliers])[0]
+    H[:,2] = np.array([0, 0, 1])
     ### END YOUR CODE
     return H, matches[max_inliers]
 
@@ -210,20 +255,41 @@ def hog_descriptor(patch, pixels_per_cell=(8,8)):
     Gx = filters.sobel_v(patch)
     Gy = filters.sobel_h(patch)
    
-    # Unsigned gradients
+    #1. Unsigned gradients
     G = np.sqrt(Gx**2 + Gy**2)
     theta = (np.arctan2(Gy, Gx) * 180 / np.pi) % 180
 
     G_cells = view_as_blocks(G, block_shape=pixels_per_cell)
     theta_cells = view_as_blocks(theta, block_shape=pixels_per_cell)
-    rows = G_cells.shape[0]
-    cols = G_cells.shape[1]
+    rows = G_cells.shape[0]   #so cell trong 1 row cua patch
+    cols = G_cells.shape[1]   #so celll trong 1 col cua patch
 
     cells = np.zeros((rows, cols, n_bins))
-
-    # Compute histogram per cell
+    
+    #2. Compute histogram per cell
     ### YOUR CODE HERE
     pass
+    for i in range(0,rows):
+        for j in range(0, cols):
+            for m in range(pixels_per_cell[0]):
+                for n in range(pixels_per_cell[1]):
+                    alpha = theta_cells[i][j][m][n]
+                    G_amp = G_cells[i][j][m][n]
+                    # gap se co 10 khoang giua cac center cua cac bin :[0-10,10-30,..,150-170,170-180]
+                    gap = int(1/2+alpha/degrees_per_bin)
+                    if gap ==0:
+                        cells[i][j][0] += G_amp
+                    elif gap == 9:
+                        cells[i][j][8] += G_amp
+                    else:
+                        lower_center = (gap-1/2)*degrees_per_bin
+                        ratio = (alpha-lower_center)/degrees_per_bin
+                        cells[i][j][gap-1] += ratio *G_amp
+                        cells[i][j][gap] += (1-ratio) *G_amp
+    #3. normalize across block 
+            cells[i][j] = cells[i][j] / np.linalg.norm(cells[i][j])
+    #4. flattening block into a feature vector
+    block = cells.flatten()
     ### YOUR CODE HERE
     
     return block

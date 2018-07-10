@@ -28,6 +28,9 @@ def conv(image, kernel):
 
     ### YOUR CODE HERE
     pass
+    for r_im in range(0,Hi):
+        for c_im in range(0, Wi):
+            out[r_im][c_im] +=np.sum(kernel*padded[r_im:r_im+Hk,c_im:c_im+Wk])
     ### END YOUR CODE
 
     return out
@@ -50,11 +53,15 @@ def gaussian_kernel(size, sigma):
     """  
     
     kernel = np.zeros((size, size))
-
+    k = int((size-1)/2)
+    
     ### YOUR CODE HERE
     pass
+    for i in range(0,size):
+        for j in range(0,size):
+            kernel[i][j] = np.exp(-((i-k)*(i-k)+(j-k)*(j-k))/(2*sigma*sigma)) * 1/(2*np.pi*sigma*sigma)
+            pass
     ### END YOUR CODE
-
     return kernel
 
 def partial_x(img):
@@ -73,6 +80,9 @@ def partial_x(img):
 
     ### YOUR CODE HERE
     pass
+    #forward derivative
+    derivative_hor = np.array([-0.5,0,0.5]).reshape(1,3)
+    out = conv(img, derivative_hor)
     ### END YOUR CODE
 
     return out
@@ -93,6 +103,9 @@ def partial_y(img):
 
     ### YOUR CODE HERE
     pass
+    #forward derivative
+    derivative_ver = np.array([-0.5,0,0.5]).reshape(3,1)
+    out = conv(img, derivative_ver)
     ### END YOUR CODE
 
     return out
@@ -114,6 +127,12 @@ def gradient(img):
 
     ### YOUR CODE HERE
     pass
+    Gx = partial_x(img)
+    Gy = partial_y(img)
+    G = np.sqrt(Gx*Gx + Gy*Gy)
+    theta = np.arctan2(Gx,Gy)
+    theta = 180/np.pi *theta
+    theta[np.where(theta<0)] += 360
     ### END YOUR CODE
 
     return G, theta
@@ -139,9 +158,31 @@ def non_maximum_suppression(G, theta):
     theta = np.floor((theta + 22.5) / 45) * 45
 
     ### BEGIN YOUR CODE
-    pass
+    minG = np.min(G)
+    out = np.copy(G)
+    G = np.pad(G,((1,1),(1,1)),'constant', constant_values = minG)
+    #Slow Way
+    for i in range(1,H+1):
+        for j in range(1,W+1):
+            k = theta[i-1][j-1]
+            if (k==0 or k==180):
+                if np.max([G[i][j], G[i][j+1],G[i][j-1]]) != G[i][j]:
+                    out[i-1][j-1] = 0
+            if (k==45 or k==225):
+                if np.max([G[i][j], G[i-1][j+1],G[i+1][j-1]]) != G[i][j]:
+                    out[i-1][j-1] = 0
+            if (k==90 or k==270):
+                if np.max([G[i][j], G[i-1][j],G[i+1][j]]) != G[i][j]:
+                    out[i-1][j-1] = 0
+            if (k==135 or k==315):
+                if np.max([G[i][j], G[i+1][j+1],G[i-1][j-1]]) != G[i][j]:
+                    out[i-1][j-1] = 0
+    #Fast Way
+    #tup1 = np.where((theta==0)|(theta==180))
+    #tup2 = np.where((theta==90)|(theta==270))
+    #tup3 = np.where((theta==45)|(theta==225))
+    #tup4 = np.where((theta==135)|(theta==315))
     ### END YOUR CODE
-
     return out
 
 def double_thresholding(img, high, low):
@@ -165,6 +206,8 @@ def double_thresholding(img, high, low):
 
     ### YOUR CODE HERE
     pass
+    strong_edges = img>high
+    weak_edges = (img < high) & (img > low)
     ### END YOUR CODE
 
     return strong_edges, weak_edges
@@ -184,7 +227,8 @@ def get_neighbors(y, x, H, W):
         y, x: location of the pixel
         H, W: size of the image
     Returns:
-        neighbors: list of indices of neighboring pixels [(i, j)]
+        neighbors: list of indices of neighboring pixels [(i, j)
+
     """
     neighbors = []
 
@@ -218,6 +262,11 @@ def link_edges(strong_edges, weak_edges):
 
     ### YOUR CODE HERE
     pass
+    edges = np.copy(strong_edges)
+    for x,y in indices:
+        for neighbor in get_neighbors(y,x,H,W):
+            if weak_edges[neighbor] >0:
+                edges[neighbor] = weak_edges[neighbor]
     ### END YOUR CODE
 
     return edges
@@ -236,6 +285,11 @@ def canny(img, kernel_size=5, sigma=1.4, high=20, low=15):
     """
     ### YOUR CODE HERE
     pass
+    img = conv(img,gaussian_kernel(kernel_size, sigma))
+    G,theta = gradient(img)
+    G = non_maximum_suppression(G, theta)
+    strong_edges, weak_edges = double_thresholding(G,high,low)
+    edge = link_edges(strong_edges, weak_edges)
     ### END YOUR CODE
 
     return edge
