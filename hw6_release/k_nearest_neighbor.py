@@ -28,6 +28,11 @@ def compute_distances(X1, X2):
     # HINT: Try to formulate the l2 distance using matrix multiplication
 
     pass
+    mask_X1 = np.sum(X1**2, axis =1).reshape(M,1)
+    mask_X1 = np.repeat(mask_X1, N, axis = 1)
+    mask_X2 = np.sum(X2**2, axis =1).reshape(1,N)
+    mask_X2 = np.repeat(mask_X2, M, axis = 0)
+    dists = mask_X1 + mask_X2 - 2*np.dot(X1,X2.T)
     # END YOUR CODE
 
     assert dists.shape == (M, N), "dists should have shape (M, N), got %s" % dists.shape
@@ -66,6 +71,10 @@ def predict_labels(dists, y_train, k=1):
 
         # YOUR CODE HERE
         pass
+        # get k label tuong ung vs k vector train gan nhat
+        closest_y = y_train[np.argsort(dists[i])[:k]]
+        most_common = max(closest_y, key=list(closest_y).count) # day la cach lay max trong 1 list
+        y_pred[i] = most_common
         # END YOUR CODE
 
     return y_pred
@@ -112,6 +121,13 @@ def split_folds(X_train, y_train, num_folds):
     # YOUR CODE HERE
     # Hint: You can use the numpy array_split function.
     pass
+    X_train_split = np.array(np.array_split(X_train, num_folds))
+    y_train_split = np.array(np.array_split(y_train, num_folds))
+    for i in range(num_folds):
+        X_trains[i] = X_train_split[:num_folds-1].reshape(training_size, X_train.shape[1])
+        y_trains[i] = y_train_split[:num_folds-1].reshape(training_size,)
+        X_vals[i] = X_train_split[num_folds-1].reshape(validation_size, X_train.shape[1])
+        y_vals[i] = y_train_split[num_folds-1].reshape(validation_size,)
     # END YOUR CODE
 
     return X_trains, y_trains, X_vals, y_vals

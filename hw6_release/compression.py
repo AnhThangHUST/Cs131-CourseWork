@@ -18,8 +18,16 @@ def compress_image(image, num_values):
     # YOUR CODE HERE
     # Steps:
     #     1. Get SVD of the image
+    u, s, v = np.linalg.svd(image)
     #     2. Only keep the top `num_values` singular values, and compute `compressed_image`
+    # s chi la 1 vector chua duong cheo
+    s[num_values:] = 0
+    new_s = np.zeros((u.shape[0], s.shape[0]))
+    new_s[:s.shape[0], :s.shape[0]] = np.diag(s)
+    us = np.dot(u, new_s)
+    compressed_image = np.dot(us, v)
     #     3. Compute the compressed size
+    compressed_size = np.size(u[:, :num_values]) + np.size(s[:num_values]) + np.size(v[:,:num_values])
     pass
     # END YOUR CODE
 

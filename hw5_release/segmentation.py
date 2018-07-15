@@ -33,12 +33,26 @@ def kmeans(features, k, num_iters=100):
     idxs = np.random.choice(N, size=k, replace=False)
     centers = features[idxs]
     assignments = np.zeros(N)
-
+    prev_assignments = np.zeros(N)
     for n in range(num_iters):
         ### YOUR CODE HERE
         pass
+        #2. Tinh ra xem trung tam nao la gan nhat vs diem do
+        for i in range(N):
+            diff = centers-features[i]
+            distances = np.linalg.norm(diff, axis = 1)
+            assignments[i] = np.argmin(distances)
+        #3. Tinh toan lai trung tam cua cac cum
+        for j in range(k):
+            points_belong_to_cluster = features[np.where(assignments==j)]
+            # centers luc sau co the khong phai la 1 diem  cua feature nua
+            if len(points_belong_to_cluster)!=0:
+                centers[j] = np.mean(points_belong_to_cluster, axis=0)
+        #4. Neu assignments khong co j thay doi thi return khoi vong lap
+        if (np.array_equal(prev_assignments, assignments)):
+            break
+        prev_assignments = np.copy(assignments)
         ### END YOUR CODE
-
     return assignments
 
 def kmeans_fast(features, k, num_iters=100):
@@ -69,12 +83,28 @@ def kmeans_fast(features, k, num_iters=100):
     idxs = np.random.choice(N, size=k, replace=False)
     centers = features[idxs]
     assignments = np.zeros(N)
-
+    # ta implement tuong tu ham tren vi da fast nhat co the roi, thay moi np.where
+    prev_assignments = np.zeros(N)
     for n in range(num_iters):
         ### YOUR CODE HERE
-        pass
-        ### END YOUR CODE
-
+        #centers : K*D, feature: N*D
+        square_center = np.square(centers)
+        mask_center = np.sum(square_center, axis = 1).reshape(k,1)
+        mask_center = np.repeat(mask_center, N, axis = 1)
+        square_feature = np.square(features)
+        mask_feature = np.sum(square_feature, axis = 1).reshape(1,N)
+        mask_feature = np.repeat(mask_feature, k, axis = 0)
+        all_distances = mask_center + mask_feature - 2 * np.dot(centers,features.T)
+        all_distances[all_distances==0] = np.max(all_distances)
+        assignments = np.argmin(all_distances, axis = 0)
+        for j in range(k):
+            points_belong_to_cluster = features[np.where(assignments==j)]
+            # centers luc sau co the khong phai la 1 diem  cua feature nua
+            if len(points_belong_to_cluster)!=0:
+                centers[j] = np.mean(points_belong_to_cluster, axis=0)
+        if (np.array_equal(prev_assignments, assignments)):
+            break
+        prev_assignments = np.copy(assignments)
     return assignments
 
 
@@ -89,7 +119,7 @@ def hierarchical_clustering(features, k):
         Compute the distance between all pairs of clusters
         Merge the pair of clusters that are closest to each other
 
-    We will use Euclidean distance to defeine distance between two clusters.
+    We will use Euclidean distance to define distance between two clusters.
 
     Recomputing the centroids of all clusters and the distances between all
     pairs of centroids at each step of the loop would be very slow. Thankfully
@@ -121,12 +151,30 @@ def hierarchical_clustering(features, k):
     assignments = np.arange(N)
     centers = np.copy(features)
     n_clusters = N
-
+    distances = np.zeros_like(assignments)
     while n_clusters > k:
         ### YOUR CODE HERE
-        pass
-        ### END YOUR CODE
+        # Luu y la ta can tinh khoang cach giua cac cap trung tam(centroid) center de xem cac cluster gan nhau nhat
+        all_distances = np.zeros((n_clusters,n_clusters))
+        for i in range(n_clusters):
+            #1. tinh khoang cach giua cac cluster voi nhau
+            all_distances[i] = np.linalg.norm(centers - centers[i], axis = 1)
+            # gia su ta da co bang all distance N*N chi co distance giua 1 diem vs chinh no =0 thi
+        all_distances[all_distances==0] = np.max(all_distances)
 
+        #2. hop cac cluster gan nhau nhat
+        min_index = np.argmin(all_distances)
+        #index_cluster1< index_cluster2
+        index_cluster1 = np.argmin(all_distances) // n_clusters
+        index_cluster2 = np.argmin(all_distances) % n_clusters 
+        assignments[assignments==index_cluster2] = index_cluster1
+        assignments[assignments>index_cluster2] -= 1
+        # tinh lai centroid cua cac cluster and number of cluster
+        centers[index_cluster1] = np.mean(features[assignments==index_cluster1], axis = 0)
+        centers = np.delete(centers, index_cluster2, axis = 0)
+        n_clusters -= 1
+        ### END YOUR CODE
+        
     return assignments
 
 
@@ -146,6 +194,7 @@ def color_features(img):
 
     ### YOUR CODE HERE
     pass
+    features = img.reshape((H*W,C))
     ### END YOUR CODE
 
     return features
@@ -174,6 +223,11 @@ def color_position_features(img):
 
     ### YOUR CODE HERE
     pass
+    features[:,:C] = color.reshape((-1,C))
+    features[:,C] = np.mgrid[:H, :W][0].reshape((H*W))
+    features[:,C+1] = np.mgrid[:H, :W][1].reshape((H*W))
+    features -= np.mean(features, axis=0)
+    features /= np.std(features, axis=0)
     ### END YOUR CODE
 
     return features
