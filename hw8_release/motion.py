@@ -38,13 +38,17 @@ def lucas_kanade(img1, img2, keypoints, window_size=5):
         # In order to achieve more accurate results, image brightness at subpixel
         # locations can be computed using bilinear interpolation.
         y = int(round(y)); x = int(round(x))
-
         ### YOUR CODE HERE
         pass
+        A = np.append(Iy[y-w:y+w+1, x-w:x+w+1].reshape(window_size**2,1),
+                      Ix[y-w:y+w+1, x-w:x+w+1].reshape(window_size**2,1), axis = 1)
+        AT = A.transpose()
+        A_inv = np.linalg.inv(AT.dot(A))
+        B = -It[y-w:y+w+1, x-w:x+w+1].reshape(window_size**2,1)
+        flow_vector_i = A_inv.dot(AT.dot(np.asarray(B))).reshape(2,)
+        flow_vectors.append(flow_vector_i) 
         ### END YOUR CODE
-
     flow_vectors = np.array(flow_vectors)
-
     return flow_vectors
 
 def iterative_lucas_kanade(img1, img2, keypoints,
@@ -82,11 +86,15 @@ def iterative_lucas_kanade(img1, img2, keypoints,
     for y, x, gy, gx in np.hstack((keypoints, g)):
         v = np.zeros(2) # Initialize flow vector as zero vector
         y1 = int(round(y)); x1 = int(round(x))
-
-
+        
         # TODO: Compute inverse of G at point (x1, y1)
         ### YOUR CODE HERE
         pass
+        Ix_patch = Ix[y1-w:y1+w+1, x1-w:x1+w+1]
+        Iy_patch = Iy[y1-w:y1+w+1, x1-w:x1+w+1]
+        IxIy = Ix_patch*Iy_patch
+        G = np.array([[np.sum(Ix_patch**2), np.sum(IxIy)],[np.sum(IxIy), np.sum(Iy_patch**2)]])
+        G_inv = np.linalg.inv(G)
         ### END YOUR CODE
 
         # iteratively update flow vector
@@ -94,15 +102,18 @@ def iterative_lucas_kanade(img1, img2, keypoints,
             vx, vy = v
             # Refined position of the point in the next frame
             y2 = int(round(y+gy+vy)); x2 = int(round(x+gx+vx))
-
             # TODO: Compute bk and vk = inv(G) x bk
             ### YOUR CODE HERE
             pass
+            delta_Ik = img1[y1-w:y1+w+1, x1-w:x1+w+1] - img2[y2-w:y2+w+1, x2-w:x2+w+1]
+            bk1 = delta_Ik * Ix_patch
+            bk2 = delta_Ik * Iy_patch
+            bk = np.array([np.sum(bk1), np.sum(bk2)]).reshape(2,)
+            vk = G_inv.dot(bk)
             ### END YOUR CODE
 
             # Update flow vector by vk
             v += vk
-
         vx, vy = v
         flow_vectors.append([vy, vx])
 
@@ -132,13 +143,17 @@ def pyramid_lucas_kanade(img1, img2, keypoints,
     # Build image pyramids of img1 and img2
     pyramid1 = tuple(pyramid_gaussian(img1, max_layer=level, downscale=scale))
     pyramid2 = tuple(pyramid_gaussian(img2, max_layer=level, downscale=scale))
-
     # Initialize pyramidal guess
-    g = np.zeros(keypoints.shape)
-
+    g = np.zeros(keypoints.shape) #thang nay chinh la gL
+    
+    # initialize flow vectors
+    d = np.empty(keypoints.shape)
     for L in range(level, -1, -1):
         ### YOUR CODE HERE
         pass
+        keypoints_L = keypoints/scale**L
+        d = iterative_lucas_kanade(pyramid1[L], pyramid2[L], keypoints_L, window_size, num_iters, g)
+        g = scale*(g+d)
         ### END YOUR CODE
 
     d = g + d
@@ -160,6 +175,14 @@ def compute_error(patch1, patch2):
     error = 0
     ### YOUR CODE HERE
     pass
+    patch_size, patch_size = patch1.shape
+    #patch1 = (patch1-patch1.min())/(patch1.max()-patch1.min())
+    #patch2 = (patch2-patch2.min())/(patch2.max()-patch2.min())
+    #error = np.sum((patch1-patch2)**2)
+    patch1_n = (patch1 - np.mean(patch1)) / np.std(patch1)
+    patch2_n = (patch2 - np.mean(patch2)) / np.std(patch2)
+    error = np.mean(np.square(patch1_n - patch2_n))
+
     ### END YOUR CODE
     return error
 
@@ -241,6 +264,16 @@ def IoU(bbox1, bbox2):
 
     ### YOUR CODE HERE
     pass
+    if x1 < x2:
+        if y1 < y2:
+            score = (x1+w1-x2) * (y1+h1-y2) / (w1*h1 + w2*h2 - (x1+w1-x2)*(y1+h1-y2))
+        else:
+            score = (x1+w1-x2) * (y2+h2-y1) / (w1*h1 + w2*h2 - (x1+w1-x2)*(y2+h2-y1))
+    else:
+        if y1 < y2:
+            score = (x2+w2-x1) * (y1+h1-y2) / (w1*h1 + w2*h2 - (x2+w2-x1)*(y1+h1-y2))
+        else:
+            score = (x2+w2-x1) * (y2+h2-y1) / (w1*h1 + w2*h2 - (x2+w2-x1)*(y2+h2-y1))
     ### END YOUR CODE
 
     return score
